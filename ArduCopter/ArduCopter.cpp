@@ -138,7 +138,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(gripper_update,        10,     75),
 #endif
 #ifdef USERHOOK_FASTLOOP
-    SCHED_TASK(userhook_FastLoop,    100,     75),
+    SCHED_TASK(userhook_FastLoop,    200,     75),  // Matthew's Note: Originally 100Hz - changed to 200Hz
 #endif
 #ifdef USERHOOK_50HZLOOP
     SCHED_TASK(userhook_50Hz,         50,     75),
