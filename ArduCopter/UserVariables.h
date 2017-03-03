@@ -4,11 +4,13 @@
 // variables
 #ifdef USERHOOK_VARIABLES
 
-int16_t     Previous_flow;
-int16_t     Current_flow;
+float       Previous_flow;
+float       Current_flow;
 uint32_t    Previous_time;
 uint32_t    Current_time;
-uint32_t    Flow_displacement;
+uint32_t    Start_time;
+uint32_t    Time_taken;
+float       Flow_displacement;
 
 
 #if WII_CAMERA == 1
