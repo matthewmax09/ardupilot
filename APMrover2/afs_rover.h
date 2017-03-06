@@ -1,7 +1,4 @@
 /*
-  Battery SMBus PX4 driver
-*/
-/*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
@@ -17,25 +14,30 @@
  */
 #pragma once
 
-#include <AP_Common/AP_Common.h>
-#include <AP_Param/AP_Param.h>
-#include <AP_Math/AP_Math.h>
-#include "AP_BattMonitor_SMBus.h"
+/*
+  advanced failsafe support for rover
+ */
 
-class AP_BattMonitor_SMBus_PX4 : public AP_BattMonitor_SMBus
+#if ADVANCED_FAILSAFE == ENABLED
+#include <AP_AdvancedFailsafe/AP_AdvancedFailsafe.h>
+
+/*
+  a rover specific AP_AdvancedFailsafe class
+ */
+class AP_AdvancedFailsafe_Rover : public AP_AdvancedFailsafe
 {
 public:
-    // Constructor
-    AP_BattMonitor_SMBus_PX4(AP_BattMonitor &mon, uint8_t instance, AP_BattMonitor::BattMonitor_State &mon_state);
+    AP_AdvancedFailsafe_Rover(AP_Mission &_mission, AP_Baro &_baro, const AP_GPS &_gps, const RCMapper &_rcmap);
 
-    /// init
-    void init();
+    // called to set all outputs to termination state
+    void terminate_vehicle(void);
 
-    /// read - read the battery voltage and current
-    void read();
+protected:
+    // setup failsafe values for if FMU firmware stops running
+    void setup_IO_failsafe(void);
 
-private:
-    int         _batt_sub;          // orb subscription description
-    int         _batt_fd;           // file descriptor
-    bool        _capacity_updated;  // capacity info read
+    // return the AFS mapped control mode
+    enum control_mode afs_mode(void);
 };
+
+#endif  // ADVANCED_FAILSAFE

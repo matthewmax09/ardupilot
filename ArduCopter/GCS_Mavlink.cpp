@@ -11,7 +11,7 @@ void Copter::gcs_send_heartbeat(void)
 void Copter::gcs_send_deferred(void)
 {
     gcs_send_message(MSG_RETRY_DEFERRED);
-    GCS_MAVLINK::service_statustext();
+    gcs().service_statustext();
 }
 
 /*
@@ -78,7 +78,7 @@ NOINLINE void Copter::send_heartbeat(mavlink_channel_t chan)
     // indicate we have set a custom mode
     base_mode |= MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
 
-    gcs[chan-MAVLINK_COMM_0].send_heartbeat(get_frame_mav_type(),
+    gcs_chan[chan-MAVLINK_COMM_0].send_heartbeat(get_frame_mav_type(),
                                             base_mode,
                                             custom_mode,
                                             system_status);
@@ -211,13 +211,13 @@ void NOINLINE Copter::send_current_waypoint(mavlink_channel_t chan)
 void NOINLINE Copter::send_rangefinder(mavlink_channel_t chan)
 {
     // exit immediately if rangefinder is disabled
-    if (!rangefinder.has_data()) {
+    if (!rangefinder.has_data_orient(ROTATION_PITCH_270)) {
         return;
     }
     mavlink_msg_rangefinder_send(
             chan,
-            rangefinder.distance_cm() * 0.01f,
-            rangefinder.voltage_mv() * 0.001f);
+            rangefinder.distance_cm_orient(ROTATION_PITCH_270) * 0.01f,
+            rangefinder.voltage_mv_orient(ROTATION_PITCH_270) * 0.001f);
 }
 #endif
 
@@ -414,7 +414,7 @@ bool GCS_MAVLINK_Copter::try_send_message(enum ap_message id)
         send_radio_in(copter.receiver_rssi);
         break;
 
-    case MSG_RADIO_OUT:
+    case MSG_SERVO_OUTPUT_RAW:
         CHECK_PAYLOAD_SIZE(SERVO_OUTPUT_RAW);
         send_servo_output_raw(false);
         break;
@@ -744,7 +744,7 @@ GCS_MAVLINK_Copter::data_stream_send(void)
     if (copter.gcs_out_of_time) return;
 
     if (stream_trigger(STREAM_RC_CHANNELS)) {
-        send_message(MSG_RADIO_OUT);
+        send_message(MSG_SERVO_OUTPUT_RAW);
         send_message(MSG_RADIO_IN);
     }
 
@@ -848,6 +848,13 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
 
     case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:         // MAV ID: 21
     {
+        // if we have not yet initialised (including allocating the motors
+        // object) we drop this request. That prevents the GCS from getting
+        // a confusing parameter count during bootup
+        if (!copter.ap.initialised) {
+            break;
+        }
+
         // mark the firmware version in the tlog
         send_text(MAV_SEVERITY_INFO, FIRMWARE_STRING);
 
@@ -1797,8 +1804,9 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
     }
 
     case MAVLINK_MSG_ID_LOG_REQUEST_DATA:
-    case MAVLINK_MSG_ID_LOG_ERASE:
         copter.in_log_download = true;
+        /* no break */
+    case MAVLINK_MSG_ID_LOG_ERASE:
         /* no break */
     case MAVLINK_MSG_ID_LOG_REQUEST_LIST:
         if (!copter.in_mavlink_delay && !copter.motors->armed()) {
@@ -1994,7 +2002,7 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
 void Copter::mavlink_delay_cb()
 {
     static uint32_t last_1hz, last_50hz, last_5s;
-    if (!gcs[0].initialised || in_mavlink_delay) return;
+    if (!gcs_chan[0].initialised || in_mavlink_delay) return;
 
     in_mavlink_delay = true;
 
@@ -2026,8 +2034,8 @@ void Copter::mavlink_delay_cb()
 void Copter::gcs_send_message(enum ap_message id)
 {
     for (uint8_t i=0; i<num_gcs; i++) {
-        if (gcs[i].initialised) {
-            gcs[i].send_message(id);
+        if (gcs_chan[i].initialised) {
+            gcs_chan[i].send_message(id);
         }
     }
 }
@@ -2038,9 +2046,9 @@ void Copter::gcs_send_message(enum ap_message id)
 void Copter::gcs_send_mission_item_reached_message(uint16_t mission_index)
 {
     for (uint8_t i=0; i<num_gcs; i++) {
-        if (gcs[i].initialised) {
-            gcs[i].mission_item_reached_index = mission_index;
-            gcs[i].send_message(MSG_MISSION_ITEM_REACHED);
+        if (gcs_chan[i].initialised) {
+            gcs_chan[i].mission_item_reached_index = mission_index;
+            gcs_chan[i].send_message(MSG_MISSION_ITEM_REACHED);
         }
     }
 }
@@ -2051,8 +2059,8 @@ void Copter::gcs_send_mission_item_reached_message(uint16_t mission_index)
 void Copter::gcs_data_stream_send(void)
 {
     for (uint8_t i=0; i<num_gcs; i++) {
-        if (gcs[i].initialised) {
-            gcs[i].data_stream_send();
+        if (gcs_chan[i].initialised) {
+            gcs_chan[i].data_stream_send();
         }
     }
 }
@@ -2063,11 +2071,11 @@ void Copter::gcs_data_stream_send(void)
 void Copter::gcs_check_input(void)
 {
     for (uint8_t i=0; i<num_gcs; i++) {
-        if (gcs[i].initialised) {
+        if (gcs_chan[i].initialised) {
 #if CLI_ENABLED == ENABLED
-            gcs[i].update(g.cli_enabled==1?FUNCTOR_BIND_MEMBER(&Copter::run_cli, void, AP_HAL::UARTDriver *):nullptr);
+            gcs_chan[i].update(g.cli_enabled==1?FUNCTOR_BIND_MEMBER(&Copter::run_cli, void, AP_HAL::UARTDriver *):nullptr);
 #else
-            gcs[i].update(nullptr);
+            gcs_chan[i].update(nullptr);
 #endif
         }
     }
@@ -2075,7 +2083,7 @@ void Copter::gcs_check_input(void)
 
 void Copter::gcs_send_text(MAV_SEVERITY severity, const char *str)
 {
-    GCS_MAVLINK::send_statustext(severity, 0xFF, str);
+    gcs().send_statustext(severity, 0xFF, str);
     notify.send_text(str);
 }
 
@@ -2091,7 +2099,7 @@ void Copter::gcs_send_text_fmt(MAV_SEVERITY severity, const char *fmt, ...)
     va_start(arg_list, fmt);
     va_end(arg_list);
     hal.util->vsnprintf((char *)str, sizeof(str), fmt, arg_list);
-    GCS_MAVLINK::send_statustext(severity, 0xFF, str);
+    gcs().send_statustext(severity, 0xFF, str);
     notify.send_text(str);
 }
 

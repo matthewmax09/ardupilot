@@ -79,6 +79,9 @@
 
 // Local modules
 #include "defines.h"
+#if ADVANCED_FAILSAFE == ENABLED
+#include "afs_rover.h"
+#endif
 #include "Parameters.h"
 #include "GCS_Mavlink.h"
 
@@ -94,6 +97,9 @@ public:
     friend class Parameters;
     friend class ParametersG2;
     friend class AP_Arming_Rover;
+#if ADVANCED_FAILSAFE == ENABLED
+    friend class AP_AdvancedFailsafe_Rover;
+#endif
 
     Rover(void);
 
@@ -136,7 +142,7 @@ private:
     AP_Baro barometer;
     Compass compass;
     AP_InertialSensor ins;
-    RangeFinder sonar { serial_manager };
+    RangeFinder sonar { serial_manager, ROTATION_NONE };
     AP_Button button;
 
     // flight modes convenience array
@@ -179,7 +185,9 @@ private:
     // GCS handling
     AP_SerialManager serial_manager;
     const uint8_t num_gcs;
-    GCS_MAVLINK_Rover gcs[MAVLINK_COMM_NUM_BUFFERS];
+    GCS_MAVLINK_Rover gcs_chan[MAVLINK_COMM_NUM_BUFFERS];
+    GCS _gcs; // avoid using this; use gcs()
+    GCS &gcs() { return _gcs; }
 
     // relay support
     AP_Relay relay;
@@ -554,6 +562,9 @@ private:
     void set_loiter_active(const AP_Mission::Mission_Command& cmd);
     void Log_Write_GuidedTarget(uint8_t target_type, const Vector3f& pos_target, const Vector3f& vel_target);
     void crash_check();
+#if ADVANCED_FAILSAFE == ENABLED
+    void afs_fs_check(void);
+#endif
 
 public:
     bool print_log_menu(void);

@@ -15,6 +15,8 @@
 
 #include "AP_Proximity.h"
 #include "AP_Proximity_LightWareSF40C.h"
+#include "AP_Proximity_TeraRangerTower.h"
+#include "AP_Proximity_RangeFinder.h"
 #include "AP_Proximity_MAV.h"
 #include "AP_Proximity_SITL.h"
 
@@ -27,7 +29,7 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     // @Param: _TYPE
     // @DisplayName: Proximity type
     // @Description: What type of proximity sensor is connected
-    // @Values: 0:None,1:LightWareSF40C,2:MAVLink
+    // @Values: 0:None,1:LightWareSF40C,2:MAVLink,3:TeraRangerTower,4:RangeFinder
     // @User: Standard
     AP_GROUPINFO("_TYPE",   1, AP_Proximity, _type[0], 0),
 
@@ -70,7 +72,7 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_IGN_ANG2", 6, AP_Proximity, _ignore_angle_deg[1], 0),
 
-    // @Param: _IGN_WID1
+    // @Param: _IGN_WID2
     // @DisplayName: Proximity sensor ignore width 2
     // @Description: Proximity sensor ignore width 2
     // @Units: degrees
@@ -146,7 +148,7 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     // @Param: 2_TYPE
     // @DisplayName: Second Proximity type
     // @Description: What type of proximity sensor is connected
-    // @Values: 0:None,1:LightWareSF40C,2:MAVLink
+    // @Values: 0:None,1:LightWareSF40C,2:MAVLink,3:TeraRangerTower,4:RangeFinder
     // @User: Advanced
     AP_GROUPINFO("2_TYPE", 16, AP_Proximity, _type[1], 0),
 
@@ -280,6 +282,18 @@ void AP_Proximity::detect_instance(uint8_t instance)
     if (type == Proximity_Type_MAV) {
         state[instance].instance = instance;
         drivers[instance] = new AP_Proximity_MAV(*this, state[instance]);
+        return;
+    }
+    if (type == Proximity_Type_TRTOWER) {
+        if (AP_Proximity_TeraRangerTower::detect(serial_manager)) {
+            state[instance].instance = instance;
+            drivers[instance] = new AP_Proximity_TeraRangerTower(*this, state[instance], serial_manager);
+            return;
+        }
+    }
+    if (type == Proximity_Type_RangeFinder) {
+        state[instance].instance = instance;
+        drivers[instance] = new AP_Proximity_RangeFinder(*this, state[instance]);
         return;
     }
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL

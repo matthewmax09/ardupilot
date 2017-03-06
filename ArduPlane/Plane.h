@@ -95,6 +95,7 @@
 #include <AP_Landing/AP_Landing.h>
 
 #include "GCS_Mavlink.h"
+#include "GCS_Plane.h"
 #include "quadplane.h"
 #include "tuning.h"
 
@@ -144,6 +145,7 @@ public:
     friend class AP_Tuning_Plane;
     friend class AP_AdvancedFailsafe_Plane;
     friend class AP_Avoidance_Plane;
+    friend class GCS_Plane;
 
     Plane(void);
 
@@ -198,7 +200,7 @@ private:
 
     AP_InertialSensor ins;
 
-    RangeFinder rangefinder {serial_manager};
+    RangeFinder rangefinder {serial_manager, ROTATION_PITCH_270};
 
     AP_Vehicle::FixedWing::Rangefinder_State rangefinder_state;
 
@@ -250,8 +252,8 @@ private:
 
     // GCS selection
     AP_SerialManager serial_manager;
-    const uint8_t num_gcs = MAVLINK_COMM_NUM_BUFFERS;
-    GCS_MAVLINK_Plane gcs[MAVLINK_COMM_NUM_BUFFERS];
+    GCS_Plane _gcs; // avoid using this; use gcs()
+    GCS_Plane &gcs() { return _gcs; }
 
     // selected navigation controller
     AP_Navigation *nav_controller = &L1_controller;
@@ -639,8 +641,19 @@ private:
         // Direction for loiter. 1 for clockwise, -1 for counter-clockwise
         int8_t direction;
 
+        // when loitering and an altitude is involved, this flag is true when it has been reached at least once
+        bool reached_target_alt;
+
+        // check for scenarios where updrafts can keep you from loitering down indefinitely.
+        bool unable_to_acheive_target_alt;
+
         // start time of the loiter.  Milliseconds.
         uint32_t start_time_ms;
+
+        // altitude at start of loiter loop lap. Used to detect delta alt of each lap.
+        // only valid when sum_cd > 36000
+        int32_t start_lap_alt_cm;
+        int32_t next_sum_lap_cd;
 
         // The amount of time we should stay in a loiter for the Loiter Time command.  Milliseconds.
         uint32_t time_max_ms;
@@ -699,6 +712,8 @@ private:
         float lookahead;
 #endif
     } target_altitude {};
+
+    float relative_altitude = 0.0f;
 
     // INS variables
     // The main loop execution time.  Seconds
@@ -829,8 +844,6 @@ private:
     void adjust_altitude_target();
     void setup_glide_slope(void);
     int32_t get_RTL_altitude();
-    float relative_altitude(void);
-    int32_t relative_altitude_abs_cm(void);
     float relative_ground_altitude(bool use_rangefinder_if_available);
     void set_target_altitude_current(void);
     void set_target_altitude_current_adjusted(void);
@@ -1007,6 +1020,7 @@ private:
     void servo_output_mixers(void);
     void servos_output(void);
     void servos_auto_trim(void);
+    void servos_twin_engine_mix();
     void throttle_watt_limiter(int8_t &min_throttle, int8_t &max_throttle);
     bool allow_reverse_thrust(void);
     void update_aux();

@@ -498,7 +498,7 @@ AP_GPS::update_instance(uint8_t instance)
     // has expired, re-initialise the GPS. This will cause GPS
     // detection to run again
     if (!result) {
-        if (tnow - timing[instance].last_message_time_ms > 2000) {
+        if (tnow - timing[instance].last_message_time_ms > 4000) {
             // free the driver before we run the next detection, so we
             // don't end up with two allocated at any time
             delete drivers[instance];
@@ -611,9 +611,9 @@ AP_GPS::setHIL(uint8_t instance, GPS_Status _status, uint64_t time_epoch_ms,
     istate.hdop = hdop;
     istate.num_sats = _num_sats;
     istate.last_gps_time_ms = tnow;
-    uint64_t gps_time_ms = time_epoch_ms - (17000ULL*86400ULL + 52*10*7000ULL*86400ULL - GPS_LEAPSECONDS_MILLIS);
-    istate.time_week     = gps_time_ms / (86400*7*(uint64_t)1000);
-    istate.time_week_ms  = gps_time_ms - istate.time_week*(86400*7*(uint64_t)1000);
+    uint64_t gps_time_ms = time_epoch_ms - UNIX_OFFSET_MSEC;
+    istate.time_week     = gps_time_ms / MSEC_PER_WEEK;
+    istate.time_week_ms  = gps_time_ms - istate.time_week * MSEC_PER_WEEK;
     timing[instance].last_message_time_ms = tnow;
     timing[instance].last_fix_time_ms = tnow;
     _type[instance].set(GPS_TYPE_HIL);

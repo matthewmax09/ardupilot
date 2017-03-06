@@ -116,13 +116,21 @@ void Plane::init_ardupilot()
     }
 #endif
 
-    GCS_MAVLINK::set_dataflash(&DataFlash);
+    gcs().set_dataflash(&DataFlash);
 
     mavlink_system.sysid = g.sysid_this_mav;
 
     // initialise serial ports
     serial_manager.init();
-    gcs[0].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, 0);
+    gcs().chan(0).setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, 0);
+
+
+    // specify callback function for CLI menu system
+#if CLI_ENABLED == ENABLED
+    if (g.cli_enabled) {
+        gcs().set_run_cli_func(FUNCTOR_BIND_MEMBER(&Plane::run_cli, void, AP_HAL::UARTDriver *));
+    }
+#endif
 
     // Register mavlink_delay_cb, which will run anytime you have
     // more than 5ms remaining in your call to hal.scheduler->delay
@@ -130,6 +138,8 @@ void Plane::init_ardupilot()
 
     // setup any board specific drivers
     BoardConfig.init();
+
+    relay.init();
 
     // initialise notify system
     notify.init(false);
@@ -161,9 +171,7 @@ void Plane::init_ardupilot()
     check_usb_mux();
 
     // setup telem slots with serial ports
-    for (uint8_t i = 1; i < MAVLINK_COMM_NUM_BUFFERS; i++) {
-        gcs[i].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, i);
-    }
+    gcs().setup_uarts(serial_manager);
 
     // setup frsky
 #if FRSKY_TELEM_ENABLED == ENABLED
@@ -210,8 +218,6 @@ void Plane::init_ardupilot()
 
     init_rc_in();               // sets up rc channels from radio
 
-    relay.init();
-
 #if MOUNT == ENABLED
     // initialise camera mount
     camera_mount.init(&DataFlash, serial_manager);
@@ -229,16 +235,7 @@ void Plane::init_ardupilot()
     hal.scheduler->register_timer_failsafe(failsafe_check_static, 1000);
 
 #if CLI_ENABLED == ENABLED
-    if (g.cli_enabled == 1) {
-        const char *msg = "\nPress ENTER 3 times to start interactive setup\n";
-        cliSerial->printf("%s\n", msg);
-        if (gcs[1].initialised && (gcs[1].get_uart() != nullptr)) {
-            gcs[1].get_uart()->printf("%s\n", msg);
-        }
-        if (num_gcs > 2 && gcs[2].initialised && (gcs[2].get_uart() != nullptr)) {
-            gcs[2].get_uart()->printf("%s\n", msg);
-        }
-    }
+    gcs().handle_interactive_setup();
 #endif // CLI_ENABLED
 
     init_capabilities();
@@ -571,8 +568,8 @@ void Plane::check_long_failsafe()
                    (tnow - failsafe.last_heartbeat_ms) > g.long_fs_timeout*1000) {
             failsafe_long_on_event(FAILSAFE_GCS, MODE_REASON_GCS_FAILSAFE);
         } else if (g.gcs_heartbeat_fs_enabled == GCS_FAILSAFE_HB_RSSI && 
-                   gcs[0].last_radio_status_remrssi_ms != 0 &&
-                   (tnow - gcs[0].last_radio_status_remrssi_ms) > g.long_fs_timeout*1000) {
+                   gcs().chan(0).last_radio_status_remrssi_ms != 0 &&
+                   (tnow - gcs().chan(0).last_radio_status_remrssi_ms) > g.long_fs_timeout*1000) {
             failsafe_long_on_event(FAILSAFE_GCS, MODE_REASON_GCS_FAILSAFE);
         }
     } else {
